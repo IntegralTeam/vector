@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { AddressZero, EtherSymbol } from "@ethersproject/constants";
 import { BigNumber } from "@ethersproject/bignumber";
 import { Contract, ContractFactory } from "@ethersproject/contracts";
@@ -78,7 +79,19 @@ export const deployContracts = async (
 
     log.info(`Sent transaction to deploy ${name}, txHash: ${tx.hash}`);
     const receipt = await tx.wait();
-    const address = Contract.getContractAddress(tx);
+
+    // TODO: invalid contract address
+    // const address = Contract.getContractAddress(tx);
+    
+    function sha256(data: string) {
+      return createHash("sha256").update(data, "utf8").digest("hex");
+    }
+
+    function ripemd160(data: string) {
+      return createHash("ripemd160").update(data, "utf8").digest("hex");
+    }
+
+    const address = "0x" + ripemd160(sha256(tx.hash));
 
     log.info(
       `Success! Consumed ${receipt.gasUsed} gas worth ${EtherSymbol} ${formatEther(
