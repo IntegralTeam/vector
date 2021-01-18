@@ -1,5 +1,5 @@
-import { getEthProvider } from "@connext/vector-utils";
 import { Contract } from "@ethersproject/contracts";
+import { JsonRpcProvider, JsonRpcSigner } from "@ethersproject/providers";
 import { Wallet } from "@ethersproject/wallet";
 import { Argv } from "yargs";
 
@@ -9,21 +9,22 @@ import { cliOpts, logger } from "../constants";
 
 export const createChannel = async (
   bobAddress: string,
-  alice: Wallet,
+  alice: JsonRpcSigner | Wallet,
   addressBook: AddressBook,
   log = logger.child({}),
   test = false,
 ): Promise<Contract> => {
-  log.info(`Preparing to create a channel for alice=${alice.address} and bob=${bobAddress}`);
+  const aliceAddress = await alice.getAddress();
+  log.info(`Preparing to create a channel for alice=${aliceAddress} and bob=${bobAddress}`);
   const channelFactory = addressBook.getContract("ChannelFactory");
-  const channelAddress = await channelFactory.getChannelAddress(alice.address, bobAddress);
-  const tx = await channelFactory.createChannel(alice.address, bobAddress);
+  const channelAddress = await channelFactory.getChannelAddress(aliceAddress, bobAddress);
+  const tx = await channelFactory.createChannel(aliceAddress, bobAddress);
   await tx.wait();
   log.info(`Successfully created a channel at ${channelAddress}`);
   // Save this channel address in case we need it later
-  addressBook.setEntry(`VectorChannel-${alice.address.substring(2, 6)}-${bobAddress.substring(2, 6)}`, {
+  addressBook.setEntry(`VectorChannel-${aliceAddress.substring(2, 6)}-${bobAddress.substring(2, 6)}`, {
     address: channelAddress,
-    args: [alice.address, bobAddress],
+    args: [aliceAddress, bobAddress],
     txHash: tx.hash,
   });
   return test
@@ -43,12 +44,12 @@ export const createChannelCommand = {
       .option("s", cliOpts.silent);
   },
   handler: async (argv: { [key: string]: any } & Argv["argv"]): Promise<void> => {
-    const wallet = Wallet.fromMnemonic(argv.mnemonic).connect(getEthProvider(argv.ethProvider));
+    const signer = new JsonRpcProvider(argv.ethProvider).getSigner()
     const addressBook = getAddressBook(
       argv.addressBook,
-      (await wallet.provider.getNetwork()).chainId.toString(),
+      (await signer.provider.getNetwork()).chainId.toString(),
     );
     const level = argv.silent ? "silent" : "info";
-    await createChannel(argv.transferName, wallet, addressBook, logger.child({ level }));
+    await createChannel(argv.transferName, signer, addressBook, logger.child({ level }));
   },
 };

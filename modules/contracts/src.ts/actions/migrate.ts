@@ -1,8 +1,7 @@
-import { getEthProvider } from "@connext/vector-utils";
 import { EtherSymbol, Zero } from "@ethersproject/constants";
-import { JsonRpcProvider } from "@ethersproject/providers";
-import { formatEther } from "@ethersproject/units";
+import { JsonRpcProvider, JsonRpcSigner } from "@ethersproject/providers";
 import { Wallet } from "@ethersproject/wallet";
+import { formatEther } from "@ethersproject/units";
 import { Argv } from "yargs";
 
 import { AddressBook, getAddressBook } from "../addressBook";
@@ -11,18 +10,19 @@ import { cliOpts, logger } from "../constants";
 import { deployContracts } from "./deployContracts";
 import { registerTransfer } from "./registerTransfer";
 
-export const migrate = async (wallet: Wallet, addressBook: AddressBook, log = logger.child({})): Promise<void> => {
+export const migrate = async (signer: JsonRpcSigner | Wallet, addressBook: AddressBook, log = logger.child({})): Promise<void> => {
   // Setup env & log initial state
-  const chainId = ((await wallet.provider.getNetwork()).chainId).toString();
-  const balance = await wallet.getBalance();
-  const nonce = await wallet.getTransactionCount();
-  const providerUrl = (wallet.provider as JsonRpcProvider).connection.url;
+  const chainId = ((await signer.provider.getNetwork()).chainId).toString();
+  const address = await signer.getAddress();
+  const balance = await signer.getBalance();
+  const nonce = await signer.getTransactionCount();
+  const providerUrl = (signer.provider as JsonRpcProvider).connection.url;
 
   log.info(`Preparing to migrate contracts to provider ${providerUrl} w chainId: ${chainId}`);
-  log.info(`Deployer address=${wallet.address} nonce=${nonce} balance=${formatEther(balance)}`);
+  log.info(`Deployer address=${address} nonce=${nonce} balance=${formatEther(balance)}`);
 
   if (balance.eq(Zero)) {
-    throw new Error(`Account ${wallet.address} has zero balance on chain ${chainId}, aborting migration`);
+    throw new Error(`Account ${address} has zero balance on chain ${chainId}, aborting migration`);
   }
 
   ////////////////////////////////////////
@@ -35,7 +35,7 @@ export const migrate = async (wallet: Wallet, addressBook: AddressBook, log = lo
     // Default: run testnet migration
   } else {
     await deployContracts(
-      wallet,
+      signer,
       addressBook,
       [
         ["TestToken", []],
@@ -47,15 +47,15 @@ export const migrate = async (wallet: Wallet, addressBook: AddressBook, log = lo
       ],
       log,
     );
-    await registerTransfer("Withdraw", wallet, addressBook, log);
-    await registerTransfer("HashlockTransfer", wallet, addressBook, log);
+    await registerTransfer("Withdraw", signer, addressBook, log);
+    await registerTransfer("HashlockTransfer", signer, addressBook, log);
   }
 
   ////////////////////////////////////////
   // Print summary
   log.info("All done!");
-  const spent = formatEther(balance.sub(await wallet.getBalance()));
-  const nTx = (await wallet.getTransactionCount()) - nonce;
+  const spent = formatEther(balance.sub(await signer.getBalance()));
+  const nTx = (await signer.getTransactionCount()) - nonce;
   log.info(`Sent ${nTx} transaction${nTx === 1 ? "" : "s"} & spent ${EtherSymbol} ${spent}`);
 };
 
@@ -70,12 +70,12 @@ export const migrateCommand = {
       .option("s", cliOpts.silent);
   },
   handler: async (argv: { [key: string]: any } & Argv["argv"]): Promise<void> => {
-    const wallet = Wallet.fromMnemonic(argv.mnemonic).connect(getEthProvider(argv.ethProvider));
+    const signer = new JsonRpcProvider(argv.ethProvider).getSigner()
     const addressBook = getAddressBook(
       argv.addressBook,
-      (await wallet.provider.getNetwork()).chainId.toString(),
+      (await signer.provider.getNetwork()).chainId.toString(),
     );
     const level = argv.silent ? "silent" : "info";
-    await migrate(wallet, addressBook, logger.child({ level }));
+    await migrate(signer, addressBook, logger.child({ level }));
   },
 };

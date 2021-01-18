@@ -3,6 +3,7 @@ import { BigNumber } from "@ethersproject/bignumber";
 import { Contract, ContractFactory } from "@ethersproject/contracts";
 import { keccak256 } from "@ethersproject/keccak256";
 import { formatEther } from "@ethersproject/units";
+import { JsonRpcSigner } from "@ethersproject/providers";
 import { Wallet } from "@ethersproject/wallet";
 
 import { AddressBook, AddressBookEntry } from "../addressBook";
@@ -16,7 +17,7 @@ const MIN_GAS_LIMIT = BigNumber.from(500_000);
 // 3rd arg is: [ContractName, [ConstructorArgs]][]
 // If a ContractName is given as a ConstructorArg, it will be replaced by that contract's address
 export const deployContracts = async (
-  wallet: Wallet,
+  signer: JsonRpcSigner | Wallet,
   addressBook: AddressBook,
   schema: [string, any[]][],
   log = logger.child({}),
@@ -37,7 +38,7 @@ export const deployContracts = async (
     }
 
     const savedRuntimeCodeHash = addressBook.getEntry(name).runtimeCodeHash;
-    const runtimeCodeHash = hash(await wallet.provider.getCode(address));
+    const runtimeCodeHash = hash(await signer.provider.getCode(address));
     if (runtimeCodeHash === hash("0x00") || runtimeCodeHash === hash("0x")) {
       log.info("No runtimeCode exists at the address in our address book");
       return false;
@@ -68,9 +69,9 @@ export const deployContracts = async (
     });
 
     log.info(`Deploying ${name} with args [${processedArgs.join(", ")}]`);
-    const factory = ContractFactory.fromSolidity(artifacts[name]).connect(wallet);
+    const factory = ContractFactory.fromSolidity(artifacts[name]).connect(signer);
     const deployTx = factory.getDeployTransaction(...processedArgs);
-    const tx = await wallet.sendTransaction({
+    const tx = await signer.sendTransaction({
       ...deployTx,
       gasLimit: deployTx.gasLimit && BigNumber.from(deployTx.gasLimit).lt(MIN_GAS_LIMIT) ? MIN_GAS_LIMIT : undefined,
     });
@@ -84,7 +85,7 @@ export const deployContracts = async (
         receipt.gasUsed.mul(tx.gasPrice),
       )} deploying ${name} to address: ${address}`,
     );
-    const runtimeCodeHash = hash(await wallet.provider.getCode(address));
+    const runtimeCodeHash = hash(await signer.provider.getCode(address));
     const creationCodeHash = hash(artifacts[name].bytecode);
     addressBook.setEntry(name, {
       address,

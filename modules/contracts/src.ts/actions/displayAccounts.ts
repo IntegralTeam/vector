@@ -1,24 +1,19 @@
-import { HDNode } from "@ethersproject/hdnode";
-import { Wallet } from "@ethersproject/wallet";
+import { JsonRpcProvider } from "@ethersproject/providers";
 import { Argv } from "yargs";
 
 import { cliOpts, logger } from "../constants";
 
-export const displayAccounts = async (mnemonic: string, log = logger.child({})): Promise<void> => {
-  const hdNode = HDNode.fromMnemonic(mnemonic).derivePath("m/44'/60'/0'/0");
-  const wallets: Wallet[] = Array(20)
-    .fill(0)
-    .map((_, idx) => {
-      const wallet = new Wallet(hdNode.derivePath(idx.toString()).privateKey);
-      return wallet;
-    });
-  log.info(
-    { wallets: wallets.map(w => w.address), privateKeys: wallets.map(w => w.privateKey) },
-    "All contract testing accounts",
-  );
-  log.info({ alice: wallets[0].address, recommended: "1 ETH" }, "Alice");
-  log.info({ bob: wallets[1].address, recommended: "0.5 ETH" }, "Bob");
-  log.info({ rando: wallets[2].address, recommended: "0.1 ETH" }, "Rando");
+export const displayAccounts = async (ethProvider: string, log = logger.child({})): Promise<void> => {
+  const alice = new JsonRpcProvider(ethProvider).getSigner();
+  const bob = new JsonRpcProvider(ethProvider).getSigner(1);
+  const rando = new JsonRpcProvider(ethProvider).getSigner(2);
+
+  const aliceAddres = await alice.getAddress();
+  const bobAddres = await bob.getAddress();
+  const randoAddres = await rando.getAddress();
+  log.info({ alice: aliceAddres, recommended: "1 ETH" }, "Alice");
+  log.info({ bob: bobAddres, recommended: "0.5 ETH" }, "Bob");
+  log.info({ rando: randoAddres, recommended: "0.1 ETH" }, "Rando");
 };
 
 export const displayCommand = {
@@ -28,6 +23,6 @@ export const displayCommand = {
     return yargs.option("m", cliOpts.mnemonic);
   },
   handler: async (argv: { [key: string]: any } & Argv["argv"]): Promise<void> => {
-    await displayAccounts(argv.mnemonic, logger.child({ level: "info" }));
+    await displayAccounts(argv.ethProvider, logger.child({ level: "info" }));
   },
 };

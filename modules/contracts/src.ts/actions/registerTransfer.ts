@@ -1,5 +1,5 @@
 import { RegisteredTransfer, tidy } from "@connext/vector-types";
-import { getEthProvider } from "@connext/vector-utils";
+import { JsonRpcProvider, JsonRpcSigner } from "@ethersproject/providers";
 import { Wallet } from "@ethersproject/wallet";
 import { Argv } from "yargs";
 
@@ -8,14 +8,15 @@ import { cliOpts, logger } from "../constants";
 
 export const registerTransfer = async (
   transferName: string,
-  wallet: Wallet,
+  signer: JsonRpcSigner | Wallet,
   addressBook: AddressBook,
   log = logger.child({}),
 ): Promise<void> => {
-  log.info(`Preparing to add ${transferName} to registry (Sender=${wallet.address})`);
+  const address = await signer.getAddress();
+  log.info(`Preparing to add ${transferName} to registry (Sender=${address})`);
 
-  const registry = addressBook.getContract("TransferRegistry").connect(wallet);
-  const transfer = addressBook.getContract(transferName).connect(wallet);
+  const registry = addressBook.getContract("TransferRegistry").connect(signer);
+  const transfer = addressBook.getContract(transferName).connect(signer);
 
   const registered = await registry.getTransferDefinitions();
   const transferInfo = await transfer.getRegistryInformation();
@@ -70,9 +71,9 @@ export const registerTransferCommand = {
       .option("s", cliOpts.silent);
   },
   handler: async (argv: { [key: string]: any } & Argv["argv"]): Promise<void> => {
-    const wallet = Wallet.fromMnemonic(argv.mnemonic).connect(getEthProvider(argv.ethProvider));
-    const addressBook = getAddressBook(argv.addressBook, (await wallet.provider.getNetwork()).chainId.toString());
+    const signer = new JsonRpcProvider(argv.ethProvider).getSigner();
+    const addressBook = getAddressBook(argv.addressBook, (await signer.provider.getNetwork()).chainId.toString());
     const level = argv.silent ? "silent" : "info";
-    await registerTransfer(argv.transferName, wallet, addressBook, logger.child({ level }));
+    await registerTransfer(argv.transferName, signer, addressBook, logger.child({ level }));
   },
 };
